@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import random
 from hashlib import sha256, new as hashlib_new
@@ -37,25 +36,36 @@ if st.button("Run AI Sweep"):
     START = int(start_hex, 16)
     END = int(end_hex, 16)
 
-    random.seed(42)  # Optional: makes sweep reproducible
-    results = []
-    with st.spinner("Running entropy sweep..."):
+    random.seed(42)
+    matches = []
+    with st.spinner("Scanning keyspace for potential matches..."):
         for _ in range(samples):
             k = random.randint(START, END)
             pubkey = derive_pubkey(k)
             h160 = hash160(pubkey)
-            score = entropy_score(h160)
 
             k_hex = hex(k)
             pk_hex = pubkey.hex()
             h160_hex = h160.hex()
+            score = entropy_score(h160)
 
-            is_match = h160_hex == TARGET_HASH160.lower()
-            is_pubkey_match = pk_hex == PUBKEY_HEX.lower()
+            if h160_hex == TARGET_HASH160.lower() or pk_hex == PUBKEY_HEX.lower():
+                matches.append(
+                    f"🟢 {k_hex} | Score: {score} | Pubkey: {pk_hex} | Hash160: {h160_hex}"
+                )
 
-            marker = "🟢" if is_match or is_pubkey_match else "🔸"
-            results.append((score, marker, k_hex, pk_hex, h160_hex))
+    # 🎉 Alert and output
+    if matches:
+        st.success(f"🎉 MATCH FOUND: {len(matches)} candidates")
+        for m in matches:
+            st.write(m)
 
-    results.sort(reverse=True)
-    for score, marker, k_hex, pk_hex, h160_hex in results[:100]:
-        st.write(f"{marker} **{k_hex}** | Score: {score} | Pubkey: `{pk_hex}` | Hash160: `{h160_hex}`")
+        # 🔽 Allow download
+        st.download_button(
+            label="Download Matches",
+            data="\n".join(matches),
+            file_name="puzzle135_matches.txt",
+            mime="text/plain"
+        )
+    else:
+        st.warning("No matches found in this sweep. Try more samples or adjust your range.")
