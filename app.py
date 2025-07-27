@@ -1,47 +1,69 @@
 import streamlit as st
-from ecdsa import SigningKey, SECP256k1
+import multiprocessing
+from coincurve import PrivateKey
+import os
 
-# Target public key to match
+# Constants
 TARGET_PUBKEY = "02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16"
+CHECKPOINT_INTERVAL = 100_000
 
-# Define hex range
-START_HEX = "4000000000000000000000000000000000"
-END_HEX   = "7fffffffffffffffffffffffffffffffff"
+# ECC Derivation
+def derive_compressed_pubkey(private_int):
+    priv_bytes = private_int.to_bytes(32, byteorder='big')
+    pubkey = PrivateKey(priv_bytes).public_key.format(compressed=True)
+    return pubkey.hex()
 
-def get_compressed_pubkey(k: int) -> str:
-    sk = SigningKey.from_secret_exponent(k, curve=SECP256k1)
-    vk = sk.verifying_key
-    x = vk.pubkey.point.x()
-    y = vk.pubkey.point.y()
-    prefix = '02' if y % 2 == 0 else '03'
-    return prefix + format(x, '064x')
+# Worker Task
+def worker_task(worker_id, start_int, end_int, target_pubkey):
+    checkpoint_file = f"checkpoint_worker_{worker_id}.txt"
+    scanned = 0
+    current = start_int
 
-def run_brute_search(start, end, target):
-    for k in range(start, end):
-        pubkey = get_compressed_pubkey(k)
-        if pubkey == target:
-            return hex(k)
-    return None
+    while current <= end_int:
+        derived = derive_compressed_pubkey(current)
+        if derived == target_pubkey:
+            with open(f"FOUND_{worker_id}.txt", "w") as f:
+                f.write(f"FOUND MATCH: {hex(current)}")
+            break
 
-def main():
-    st.title("🔐 Stateless Bitcoin Key Hunter")
-    st.caption("Puzzle #135 • Match compressed public key within hex range")
+        scanned += 1
+        current += 1
 
-    st.markdown(f"**Target Compressed Public Key:** `{TARGET_PUBKEY}`")
-    
-    start_hex = st.text_input("Start Hex", START_HEX)
-    end_hex = st.text_input("End Hex", END_HEX)
-    run_button = st.button("🚀 Start Scan")
+        if scanned % CHECKPOINT_INTERVAL == 0:
+            with open(checkpoint_file, "w") as f:
+                f.write(f"Last scanned: {hex(current)}\n")
 
-    if run_button:
-        start_int = int(start_hex, 16)
-        end_int = int(end_hex, 16)
-        with st.spinner("Scanning..."):
-            result = run_brute_search(start_int, end_int, TARGET_PUBKEY)
-            if result:
-                st.success(f"🎯 MATCH FOUND! Private key: `{result}`")
-            else:
-                st.warning("No match found in the selected range.")
+# Range Splitter
+def split_range(start_hex, end_hex, num_workers):
+    start_int = int(start_hex, 16)
+    end_int = int(end_hex, 16)
+    total = end_int - start_int + 1
+    chunk = total // num_workers
+    ranges = []
 
-if __name__ == "__main__":
-    main()
+    for i in range(num_workers):
+        chunk_start = start_int + i * chunk
+        chunk_end = chunk_start + chunk - 1
+        if i == num_workers - 1:
+            chunk_end = end_int
+        ranges.append((chunk_start, chunk_end))
+
+    return ranges
+
+# Streamlit UI
+st.title("🔐 Puzzle #135 Brute-Force Scanner")
+
+start_hex = st.text_input("Start Hex", "4000000000000000000000000000000000")
+end_hex = st.text_input("End Hex", "7fffffffffffffffffffffffffffffffff")
+num_workers = st.slider("Number of Workers", 1, 4, 4)
+
+if st.button("🚀 Launch Scan"):
+    st.write("Splitting range and launching workers...")
+    ranges = split_range(start_hex, end_hex, num_workers)
+
+    for i, (start, end) in enumerate(ranges):
+        st.write(f"Worker {i}: {hex(start)} → {hex(end)}")
+
+    for i, (start, end) in enumerate(ranges):
+        p = multiprocessing.Process(target=worker_task, args=(i, start, end, TARGET_PUBKEY))
+        p.start()
