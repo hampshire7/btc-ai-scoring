@@ -1,16 +1,11 @@
-# 🔐 Stateless Bitcoin Key Hunter
-A Streamlit-powered app that brute-scans private keys between two hex values and matches a known compressed public key.
+# Puzzle #135 Brute-Force Scanner
 
-### 🚀 Live Demo
-[Streamlit App](https://btc-ai-scoring-c5shsvnmq7hgmvrsuctxt4.streamlit.app/)
+This Streamlit app scans a defined private key range using 4 parallel workers to find a match for a target compressed public key.
 
-### 🧩 Puzzle Context
-Designed for Puzzle #135 and similar bounty challenges involving known public keys and limited key ranges.
+## Features
+- Multiprocessing with checkpoint logging
+- ECC pubkey derivation via `coincurve`
+- Streamlit UI with range input and slice preview
 
----
-
-## 📦 Requirements
-
-Install dependencies:
-```bash
-pip install -r requirements.txt
+## Usage
+1. Clone repo and install dependencies:
