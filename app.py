@@ -2,7 +2,7 @@ import streamlit as st
 from ecdsa import SigningKey, SECP256k1
 
 # Target public key to match
-TARGET_PUBKEY = "02cbb434aa7ae1700dcd15b20b17464817ec11715050e0fa192ffe9c29a673059f"
+TARGET_PUBKEY = "02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16"
 
 # Define hex range
 START_HEX = "4000000000000000000000000000000000"
