@@ -1,42 +1,37 @@
-import streamlit as st
-from hashlib import sha256
-import ecdsa
+import multiprocessing as mp
+from ecdsa import SigningKey, SECP256k1
 
-# Constants (Puzzle #135 Target)
-r = int("00c86bec9faea4892fd98d718bdfc770d0d11c3d6bfd4328f25fe9b06bfadb9650", 16)
-s = int("224a322e81c044d341521f65fabdfa86d84673fb55ed7533862e37f7724931fa", 16)
-z = int("92886faaf53f90a5c03d6af773a726e75097179306b980e5d28772e612e00fc7", 16)
-target_pubkey = "02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16"
+TARGET_PUBKEY_HEX = "02145d2611c823a396ef6712ce0f712f09b9b4f3135e3e0aa3230fb9b6d08d1e16"
+START_HEX = "4000000000000000000000000000000000"
+END_HEX   = "7fffffffffffffffffffffffffffffffff"
 
-# ECDSA Parameters
-curve = ecdsa.SECP256k1
-n = curve.order
+def get_compressed_pubkey(k: int) -> str:
+    sk = SigningKey.from_secret_exponent(k, curve=SECP256k1)
+    vk = sk.verifying_key
+    x, y = vk.pubkey.point.x(), vk.pubkey.point.y()
+    prefix = '02' if y % 2 == 0 else '03'
+    return prefix + format(x, '064x')
 
-def recover_priv(r, s, z, k):
-    return ((s * k - z) * pow(r, -1, n)) % n
+def brute_worker(start: int, end: int, target: str, flag):
+    for k in range(start, end):
+        if flag.is_set(): break
+        pubkey = get_compressed_pubkey(k)
+        if pubkey == target:
+            print(f"\n🎯 MATCH FOUND!\nPrivate key: {hex(k)}")
+            flag.set()
+            break
 
-def compress_pubkey(priv_int):
-    sk = ecdsa.SigningKey.from_secret_exponent(priv_int, curve=curve)
-    vk = sk.get_verifying_key()
-    x = vk.pubkey.point.x()
-    prefix = b'\x02' if vk.pubkey.point.y() % 2 == 0 else b'\x03'
-    return (prefix + x.to_bytes(32, 'big')).hex()
-
-# Streamlit Interface
-st.title("🧪 Puzzle #135: k-Recovery Tester")
-seed_base = st.text_input("🔑 Seed prefix", value="entropy_seed")
-range_start = st.number_input("Start index", value=0)
-range_end = st.number_input("End index", value=1000)
-
-if st.button("Start Scanning"):
-    with st.spinner("Scanning candidate nonces..."):
-        for i in range(range_start, range_end):
-            seed = f"{seed_base}_{i}"
-            k_candidate = int(sha256(seed.encode()).hexdigest(), 16) % n
-            priv = recover_priv(r, s, z, k_candidate)
-            pubkey = compress_pubkey(priv)
-
-            st.write(f"🔍 k index: `{i}` — PubKey: `{pubkey}`")
-            if pubkey == target_pubkey:
-                st.success(f"🎯 FOUND match! Private Key: `{hex(priv)}`")
-                break
+def launch_scan(workers: int = 8):
+    start = int(START_HEX, 16)
+    end   = int(END_HEX, 16)
+    chunk = (end - start) // workers
+    flag = mp.Event()
+    processes = []
+    for i in range(workers):
+        s = start + i * chunk
+        e = start + (i + 1) * chunk if i < workers - 1 else end
+        p = mp.Process(target=brute_worker, args=(s, e, TARGET_PUBKEY_HEX, flag))
+        p.start()
+        processes.append(p)
+    for p in processes:
+        p.join()
