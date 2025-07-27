@@ -1,2 +1,5 @@
 streamlit
-ecdsa
+pandas
+numpy
+scikit-learn
+openai
